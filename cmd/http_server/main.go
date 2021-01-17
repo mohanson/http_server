@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
+	"path"
 
 	"github.com/mohanson/doa"
 )
@@ -11,6 +13,7 @@ import (
 var (
 	flListen = flag.String("l", "127.0.0.1:8080", "listen address")
 	flRoot   = flag.String("d", ".", "root directory")
+	flR404   = flag.String("r404", "", "page uri for 404")
 )
 
 func aopBanMethods(handler http.Handler) http.Handler {
@@ -45,11 +48,24 @@ func aopLog(handler http.Handler) http.Handler {
 	})
 }
 
+func aop404(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := os.Stat(path.Join(*flRoot, r.URL.Path)); os.IsNotExist(err) {
+			if *flR404 != "" {
+				http.Redirect(w, r, *flR404, 301)
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	flag.Parse()
 	log.Println("root", *flRoot)
 	var handler http.Handler
 	handler = http.FileServer(http.Dir(*flRoot))
+	handler = aop404(handler)
 	handler = aopLog(handler)
 	handler = aopBanMethods(handler)
 	http.Handle("/", handler)
